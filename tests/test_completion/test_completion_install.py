@@ -68,11 +68,9 @@ def test_completion_install_bash():
 
 def test_completion_install_zsh():
     completion_path: Path = Path.home() / ".zshrc"
-    text = ""
     if not completion_path.is_file():  # pragma: nocover
         completion_path.write_text('echo "custom .zshrc"')
-    if completion_path.is_file():
-        text = completion_path.read_text()
+    text = completion_path.read_text() if completion_path.is_file() else ""
     result = subprocess.run(
         ["coverage", "run", mod.__file__, "--install-completion", "zsh"],
         stdout=subprocess.PIPE,
@@ -127,13 +125,10 @@ app.command()(mod.main)
 
 def test_completion_install_powershell():
     completion_path: Path = (
-        Path.home() / f".config/powershell/Microsoft.PowerShell_profile.ps1"
+        Path.home() / ".config/powershell/Microsoft.PowerShell_profile.ps1"
     )
     completion_path_bytes = f"{completion_path}\n".encode("windows-1252")
-    text = ""
-    if completion_path.is_file():  # pragma: nocover
-        text = completion_path.read_text()
-
+    text = completion_path.read_text() if completion_path.is_file() else ""
     with mock.patch.object(
         shellingham, "detect_shell", return_value=("pwsh", "/usr/bin/pwsh")
     ):

@@ -40,9 +40,8 @@ try:
 except ImportError:  # pragma: nocover
     rich = None  # type: ignore
 
-if TYPE_CHECKING:  # pragma: no cover
-    if _get_click_major() == 7:
-        import click.shell_completion
+if TYPE_CHECKING and _get_click_major() == 7:
+    import click.shell_completion
 
 MarkupMode = Literal["markdown", "rich", None]
 
@@ -71,36 +70,37 @@ def _typer_param_setup_autocompletion_compat(
         Callable[[click.Context, List[str], str], List[Union[Tuple[str, str], str]]]
     ] = None,
 ) -> None:
-    if autocompletion is not None and self._custom_shell_complete is None:
-        import warnings
+    if autocompletion is None or self._custom_shell_complete is not None:
+        return
+    import warnings
 
-        warnings.warn(
-            "'autocompletion' is renamed to 'shell_complete'. The old name is"
-            " deprecated and will be removed in Click 8.1. See the docs about"
-            " 'Parameter' for information about new behavior.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
+    warnings.warn(
+        "'autocompletion' is renamed to 'shell_complete'. The old name is"
+        " deprecated and will be removed in Click 8.1. See the docs about"
+        " 'Parameter' for information about new behavior.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
 
-        def compat_autocompletion(
-            ctx: click.Context, param: click.core.Parameter, incomplete: str
-        ) -> List["click.shell_completion.CompletionItem"]:
-            from click.shell_completion import CompletionItem
+    def compat_autocompletion(
+        ctx: click.Context, param: click.core.Parameter, incomplete: str
+    ) -> List["click.shell_completion.CompletionItem"]:
+        from click.shell_completion import CompletionItem
 
-            out = []
+        out = []
 
-            for c in autocompletion(ctx, [], incomplete):  # type: ignore
-                if isinstance(c, tuple):
-                    c = CompletionItem(c[0], help=c[1])
-                elif isinstance(c, str):
-                    c = CompletionItem(c)
+        for c in autocompletion(ctx, [], incomplete):  # type: ignore
+            if isinstance(c, tuple):
+                c = CompletionItem(c[0], help=c[1])
+            elif isinstance(c, str):
+                c = CompletionItem(c)
 
-                if c.value.startswith(incomplete):
-                    out.append(c)
+            if c.value.startswith(incomplete):
+                out.append(c)
 
-            return out
+        return out
 
-        self._custom_shell_complete = compat_autocompletion
+    self._custom_shell_complete = compat_autocompletion
 
 
 def _get_default_string(
@@ -133,12 +133,7 @@ def _get_default_string(
         else:
             default_string = click.parser.split_opt(obj.secondary_opts[0])[1]
         # Typer override end
-    elif (
-        isinstance(obj, TyperOption)
-        and obj.is_bool_flag
-        and not obj.secondary_opts
-        and not default_value
-    ):
+    elif isinstance(obj, TyperOption) and obj.is_bool_flag and not default_value:
         default_string = ""
     else:
         default_string = str(default_value)
@@ -160,10 +155,7 @@ def _extract_default_help_str(
         if _get_click_major() > 7:
             default_value = obj.get_default(ctx, call=False)
         else:
-            if inspect.isfunction(obj.default):
-                default_value = "(dynamic)"
-            else:
-                default_value = obj.default
+            default_value = "(dynamic)" if inspect.isfunction(obj.default) else obj.default
     finally:
         ctx.resilient_parsing = resilient
     return default_value
@@ -238,12 +230,11 @@ def _main(
             # Typer override end
             sys.exit(e.exit_code)
         except OSError as e:
-            if e.errno == errno.EPIPE:
-                sys.stdout = cast(TextIO, click.utils.PacifyFlushWrapper(sys.stdout))
-                sys.stderr = cast(TextIO, click.utils.PacifyFlushWrapper(sys.stderr))
-                sys.exit(1)
-            else:
+            if e.errno != errno.EPIPE:
                 raise
+            sys.stdout = cast(TextIO, click.utils.PacifyFlushWrapper(sys.stdout))
+            sys.stderr = cast(TextIO, click.utils.PacifyFlushWrapper(sys.stderr))
+            sys.exit(1)
     except click.exceptions.Exit as e:
         if standalone_mode:
             sys.exit(e.exit_code)
@@ -376,15 +367,11 @@ class TyperArgument(click.core.Argument):
         if show_default_is_str or (
             default_value is not None and (self.show_default or ctx.show_default)
         ):
-            # Typer override:
-            # Extracted to _get_default_string() to allow re-using it in rich_utils
-            default_string = self._get_default_string(
+            if default_string := self._get_default_string(
                 ctx=ctx,
                 show_default_is_str=show_default_is_str,
                 default_value=default_value,
-            )
-            # Typer override end
-            if default_string:
+            ):
                 extra.append(_("default: {default}").format(default=default_string))
         if self.required:
             extra.append("required")
@@ -400,9 +387,8 @@ class TyperArgument(click.core.Argument):
             return self.metavar
         var = (self.name or "").upper()
         if not self.required:
-            var = "[{}]".format(var)
-        type_var = self.type.get_metavar(self)
-        if type_var:
+            var = f"[{var}]"
+        if type_var := self.type.get_metavar(self):
             var += f":{type_var}"
         if self.nargs != 1:
             var += "..."
@@ -548,13 +534,12 @@ class TyperOption(click.core.Option):
         if self.show_envvar:
             envvar = self.envvar
 
-            if envvar is None:
-                if (
-                    self.allow_from_autoenv
-                    and ctx.auto_envvar_prefix is not None
-                    and self.name is not None
-                ):
-                    envvar = f"{ctx.auto_envvar_prefix}_{self.name.upper()}"
+            if envvar is None and (
+                self.allow_from_autoenv
+                and ctx.auto_envvar_prefix is not None
+                and self.name is not None
+            ):
+                envvar = f"{ctx.auto_envvar_prefix}_{self.name.upper()}"
 
             if envvar is not None:
                 var_str = (
@@ -724,12 +709,14 @@ class TyperCommand(click.core.Command):
         )
 
     def format_help(self, ctx: click.Context, formatter: click.HelpFormatter) -> None:
-        if not rich:
-            return super().format_help(ctx, formatter)
-        return rich_utils.rich_format_help(
-            obj=self,
-            ctx=ctx,
-            markup_mode=self.rich_markup_mode,
+        return (
+            rich_utils.rich_format_help(
+                obj=self,
+                ctx=ctx,
+                markup_mode=self.rich_markup_mode,
+            )
+            if rich
+            else super().format_help(ctx, formatter)
         )
 
 
@@ -786,10 +773,12 @@ class TyperGroup(click.core.Group):
         )
 
     def format_help(self, ctx: click.Context, formatter: click.HelpFormatter) -> None:
-        if not rich:
-            return super().format_help(ctx, formatter)
-        return rich_utils.rich_format_help(
-            obj=self,
-            ctx=ctx,
-            markup_mode=self.rich_markup_mode,
+        return (
+            rich_utils.rich_format_help(
+                obj=self,
+                ctx=ctx,
+                markup_mode=self.rich_markup_mode,
+            )
+            if rich
+            else super().format_help(ctx, formatter)
         )

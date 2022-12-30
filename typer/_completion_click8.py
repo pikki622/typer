@@ -99,8 +99,7 @@ class ZshComplete(click.shell_completion.ZshComplete):
     def complete(self) -> str:
         args, incomplete = self.get_completion_args()
         completions = self.get_completions(args, incomplete)
-        res = [self.format_completion(item) for item in completions]
-        if res:
+        if res := [self.format_completion(item) for item in completions]:
             args_str = "\n".join(res)
             return f"_arguments '*: :(({args_str}))'"
         else:
@@ -130,17 +129,10 @@ class FishComplete(click.shell_completion.FishComplete):
         return args, incomplete
 
     def format_completion(self, item: click.shell_completion.CompletionItem) -> str:
-        # TODO: Explore replicating the new behavior from Click, pay attention to
-        # the difference with and without formatted help
-        # if item.help:
-        #     return f"{item.type},{item.value}\t{item.help}"
-
-        # return f"{item.type},{item.value}
-        if item.help:
-            formatted_help = re.sub(r"\s", " ", item.help)
-            return f"{item.value}\t{formatted_help}"
-        else:
+        if not item.help:
             return f"{item.value}"
+        formatted_help = re.sub(r"\s", " ", item.help)
+        return f"{item.value}\t{formatted_help}"
 
     def complete(self) -> str:
         complete_action = os.getenv("_TYPER_COMPLETE_FISH_ACTION", "")

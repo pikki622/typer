@@ -199,15 +199,13 @@ def _get_help_text(
         markup_mode=markup_mode,
     )
 
-    # Get remaining lines, remove single line breaks and format as dim
-    remaining_paragraphs = help_text.split("\n\n")[1:]
-    if remaining_paragraphs:
+    if remaining_paragraphs := help_text.split("\n\n")[1:]:
         if markup_mode != MARKUP_MODE_RICH:
             # Remove single linebreaks
             remaining_paragraphs = [
-                x.replace("\n", " ").strip()
-                if not x.startswith("\b")
-                else "{}\n".format(x.strip("\b\n"))
+                "{}\n".format(x.strip("\b\n"))
+                if x.startswith("\b")
+                else x.replace("\n", " ").strip()
                 for x in remaining_paragraphs
             ]
             # Join back together
@@ -246,28 +244,25 @@ def _get_parameter_help(
     envvar = getattr(param, "envvar", None)
     var_str = ""
     # https://github.com/pallets/click/blob/0aec1168ac591e159baf6f61026d6ae322c53aaf/src/click/core.py#L2720-L2726
-    if envvar is None:
-        if (
-            getattr(param, "allow_from_autoenv", None)
-            and getattr(ctx, "auto_envvar_prefix", None) is not None
-            and param.name is not None
-        ):
-            envvar = f"{ctx.auto_envvar_prefix}_{param.name.upper()}"
+    if envvar is None and (
+        getattr(param, "allow_from_autoenv", None)
+        and getattr(ctx, "auto_envvar_prefix", None) is not None
+        and param.name is not None
+    ):
+        envvar = f"{ctx.auto_envvar_prefix}_{param.name.upper()}"
     if envvar is not None:
         var_str = (
             envvar if isinstance(envvar, str) else ", ".join(str(d) for d in envvar)
         )
 
-    # Main help text
-    help_value: Union[str, None] = getattr(param, "help", None)
-    if help_value:
+    if help_value := getattr(param, "help", None):
         paragraphs = help_value.split("\n\n")
         # Remove single linebreaks
         if markup_mode != MARKUP_MODE_MARKDOWN:
             paragraphs = [
-                x.replace("\n", " ").strip()
-                if not x.startswith("\b")
-                else "{}\n".format(x.strip("\b\n"))
+                "{}\n".format(x.strip("\b\n"))
+                if x.startswith("\b")
+                else x.replace("\n", " ").strip()
                 for x in paragraphs
             ]
         items.append(
@@ -284,22 +279,20 @@ def _get_parameter_help(
 
     # Default value
     # This uses Typer's specific param._get_default_string
-    if isinstance(param, (TyperOption, TyperArgument)):
-        if param.show_default:
-            show_default_is_str = isinstance(param.show_default, str)
-            default_value = param._extract_default_help_str(ctx=ctx)
-            default_str = param._get_default_string(
-                ctx=ctx,
-                show_default_is_str=show_default_is_str,
-                default_value=default_value,
-            )
-            if default_str:
-                items.append(
-                    Text(
-                        DEFAULT_STRING.format(default_str),
-                        style=STYLE_OPTION_DEFAULT,
-                    )
+    if isinstance(param, (TyperOption, TyperArgument)) and param.show_default:
+        show_default_is_str = isinstance(param.show_default, str)
+        default_value = param._extract_default_help_str(ctx=ctx)
+        if default_str := param._get_default_string(
+            ctx=ctx,
+            show_default_is_str=show_default_is_str,
+            default_value=default_value,
+        ):
+            items.append(
+                Text(
+                    DEFAULT_STRING.format(default_str),
+                    style=STYLE_OPTION_DEFAULT,
                 )
+            )
 
     # Required?
     if param.required:
@@ -387,10 +380,13 @@ def _print_options_panel(
             if (
                 isinstance(param.type, click.types._NumberRangeBase)
                 and isinstance(param, click.Option)
-                and not (param.count and param.type.min == 0 and param.type.max is None)
+                and (
+                    not param.count
+                    or param.type.min != 0
+                    or param.type.max is not None
+                )
             ):
-                range_str = param.type._describe_range()
-                if range_str:
+                if range_str := param.type._describe_range():
                     metavar.append(RANGE_STRING.format(range_str))
         except AttributeError:  # pragma: no cover
             # click.types._NumberRangeBase is only in Click 8x onwards
@@ -401,7 +397,6 @@ def _print_options_panel(
         if param.required:
             required = Text(REQUIRED_SHORT_STRING, style=STYLE_REQUIRED_SHORT)
 
-        # Highlighter to make [ | ] and <> dim
         class MetavarHighlighter(RegexHighlighter):
             highlights = [
                 r"^(?P<metavar_sep>(\[|<))",
@@ -428,8 +423,10 @@ def _print_options_panel(
         )
     rows_with_required: List[List[RenderableType]] = []
     if any(required_rows):
-        for required, row in zip(required_rows, options_rows):
-            rows_with_required.append([required, *row])
+        rows_with_required.extend(
+            [required, *row]
+            for required, row in zip(required_rows, options_rows)
+        )
     else:
         rows_with_required = options_rows
     if options_rows:
@@ -513,9 +510,10 @@ def _print_commands_panel(
         )
     rows_with_deprecated = rows
     if any(deprecated_rows):
-        rows_with_deprecated = []
-        for row, deprecated_text in zip(rows, deprecated_rows):
-            rows_with_deprecated.append([*row, deprecated_text])
+        rows_with_deprecated = [
+            [*row, deprecated_text]
+            for row, deprecated_text in zip(rows, deprecated_rows)
+        ]
     for row in rows_with_deprecated:
         commands_table.add_row(*row)
     if commands_table.row_count:

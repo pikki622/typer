@@ -90,11 +90,13 @@ def get_completion_script(*, prog_name: str, complete_var: str, shell: str) -> s
         click.echo(f"Shell {shell} not supported.", err=True)
         sys.exit(1)
     return (
-        script
-        % dict(
-            complete_func="_{}_completion".format(cf_name),
-            prog_name=prog_name,
-            autocomplete_var=complete_var,
+        (
+            script
+            % dict(
+                complete_func=f"_{cf_name}_completion",
+                prog_name=prog_name,
+                autocomplete_var=complete_var,
+            )
         )
     ).strip()
 
@@ -107,9 +109,7 @@ def install_bash(*, prog_name: str, complete_var: str, shell: str) -> Path:
     completion_path = Path.home() / f".bash_completions/{prog_name}.sh"
     rc_path = Path.home() / ".bashrc"
     rc_path.parent.mkdir(parents=True, exist_ok=True)
-    rc_content = ""
-    if rc_path.is_file():
-        rc_content = rc_path.read_text()
+    rc_content = rc_path.read_text() if rc_path.is_file() else ""
     completion_init_lines = [f"source {completion_path}"]
     for line in completion_init_lines:
         if line not in rc_content:  # pragma: nocover
@@ -129,9 +129,7 @@ def install_zsh(*, prog_name: str, complete_var: str, shell: str) -> Path:
     # Setup Zsh and load ~/.zfunc
     zshrc_path = Path.home() / ".zshrc"
     zshrc_path.parent.mkdir(parents=True, exist_ok=True)
-    zshrc_content = ""
-    if zshrc_path.is_file():
-        zshrc_content = zshrc_path.read_text()
+    zshrc_content = zshrc_path.read_text() if zshrc_path.is_file() else ""
     completion_init_lines = [
         "autoload -Uz compinit",
         "compinit",
@@ -215,7 +213,7 @@ def install(
     prog_name = prog_name or click.get_current_context().find_root().info_name
     assert prog_name
     if complete_var is None:
-        complete_var = "_{}_COMPLETE".format(prog_name.replace("-", "_").upper())
+        complete_var = f'_{prog_name.replace("-", "_").upper()}_COMPLETE'
     test_disable_detection = os.getenv("_TYPER_COMPLETE_TEST_DISABLE_SHELL_DETECTION")
     if shell is None and shellingham is not None and not test_disable_detection:
         shell, _ = shellingham.detect_shell()

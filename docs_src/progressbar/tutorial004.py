@@ -5,14 +5,13 @@ import typer
 
 def iterate_user_ids():
     # Let's imagine this is a web API, not a range()
-    for i in range(100):
-        yield i
+    yield from range(100)
 
 
 def main():
     total = 0
     with typer.progressbar(iterate_user_ids(), length=100) as progress:
-        for value in progress:
+        for _ in progress:
             # Fake processing time
             time.sleep(0.01)
             total += 1

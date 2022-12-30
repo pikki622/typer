@@ -21,7 +21,7 @@ def test_help():
 
 def test_call_no_arg():
     greetings = ["Hello Deadpool", "Hello Rick", "Hello Morty", "Hello Hiro"]
-    for i in range(3):
+    for _ in range(3):
         result = runner.invoke(app)
         assert result.exit_code == 0
         assert any(greet in result.output for greet in greetings)
